@@ -1,0 +1,472 @@
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { beforeEach, describe, expect, it } from 'vitest'
+import App from './App.jsx'
+import pokemonData from './data/pokemon.json'
+import { GAME_IDS, evolutionRoutesForGame } from './gameCatalog.js'
+
+const emptyEncounters = () => ({ ruby: [], sapphire: [], emerald: [] })
+
+const fixturePokemon = [
+  {
+    id: 1,
+    name: 'bulbasaur',
+    displayName: 'Bulbasaur',
+    genus: 'Seed Pokémon',
+    generation: 'generation-i',
+    evolvesFrom: null,
+    types: ['grass', 'poison'],
+    height: 7,
+    weight: 69,
+    encounters: {
+      firered: [
+        {
+          area: 'Pallet Town',
+          areaSlug: 'pallet-town-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+      leafgreen: [
+        {
+          area: 'Pallet Town',
+          areaSlug: 'pallet-town-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+    },
+  },
+  {
+    id: 152,
+    name: 'chikorita',
+    displayName: 'Chikorita',
+    genus: 'Leaf Pokémon',
+    generation: 'generation-ii',
+    evolvesFrom: null,
+    types: ['grass'],
+    height: 9,
+    weight: 64,
+    encounters: {
+      heartgold: [
+        {
+          area: 'New Bark Town',
+          areaSlug: 'new-bark-town-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+      soulsilver: [
+        {
+          area: 'New Bark Town',
+          areaSlug: 'new-bark-town-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+    },
+  },
+  {
+    id: 387,
+    name: 'turtwig',
+    displayName: 'Turtwig',
+    genus: 'Tiny Leaf Pokémon',
+    generation: 'generation-iv',
+    evolvesFrom: null,
+    types: ['grass'],
+    height: 4,
+    weight: 102,
+    encounters: {
+      diamond: [
+        {
+          area: 'Route 201',
+          areaSlug: 'sinnoh-route-201-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+      pearl: [
+        {
+          area: 'Route 201',
+          areaSlug: 'sinnoh-route-201-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+      platinum: [
+        {
+          area: 'Route 201',
+          areaSlug: 'sinnoh-route-201-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+    },
+  },
+  {
+    id: 252,
+    name: 'treecko',
+    displayName: 'Treecko',
+    genus: 'Wood Gecko Pokémon',
+    generation: 'generation-iii',
+    evolvesFrom: null,
+    types: ['grass'],
+    height: 5,
+    weight: 50,
+    encounters: {
+      ruby: [
+        {
+          area: 'Route 101',
+          areaSlug: 'hoenn-route-101-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+      sapphire: [
+        {
+          area: 'Route 101',
+          areaSlug: 'hoenn-route-101-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+      emerald: [
+        {
+          area: 'Route 101',
+          areaSlug: 'hoenn-route-101-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+    },
+  },
+  {
+    id: 253,
+    name: 'grovyle',
+    displayName: 'Grovyle',
+    genus: 'Wood Gecko Pokémon',
+    generation: 'generation-iii',
+    evolvesFrom: { id: 252, name: 'Treecko' },
+    types: ['grass'],
+    height: 9,
+    weight: 216,
+    encounters: emptyEncounters(),
+  },
+  {
+    id: 258,
+    name: 'mudkip',
+    displayName: 'Mudkip',
+    genus: 'Mud Fish Pokémon',
+    generation: 'generation-iii',
+    evolvesFrom: null,
+    types: ['water'],
+    height: 4,
+    weight: 76,
+    encounters: emptyEncounters(),
+  },
+]
+
+describe('Living Dex Tracker', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('toggles caught state on right-click without opening the location dialog', async () => {
+    render(<App pokemon={fixturePokemon} />)
+    const card = screen.getByTestId('pokemon-card-252')
+
+    expect(fireEvent.contextMenu(card)).toBe(false)
+    expect(card).toHaveClass('is-caught')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Treecko marked caught')
+
+    await waitFor(() => {
+      expect(JSON.parse(localStorage.getItem('hoenn-living-dex-caught-v1'))).toEqual([252])
+    })
+
+    fireEvent.contextMenu(card)
+    expect(card).not.toHaveClass('is-caught')
+  })
+
+  it('opens version-specific encounter details on left-click and closes with Escape', async () => {
+    const user = userEvent.setup()
+    render(<App pokemon={fixturePokemon} />)
+
+    await user.click(screen.getByRole('button', { name: 'View Treecko field notes' }))
+    const dialog = screen.getByRole('dialog', { name: 'Treecko' })
+    expect(within(dialog).getByRole('region', { name: 'Treecko field notes' })).toHaveAttribute('tabindex', '0')
+
+    expect(within(dialog).getByText('Route 101')).toBeInTheDocument()
+    expect(within(dialog).getByText('Gift')).toBeInTheDocument()
+    expect(within(dialog).getByText('Lv. 5')).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('uses the header game selection for sprites and location details', async () => {
+    const user = userEvent.setup()
+    render(<App pokemon={fixturePokemon} />)
+
+    const gameSelection = screen.getByLabelText('Game selection')
+    expect(gameSelection).toHaveValue('emerald')
+    expect([...gameSelection.querySelectorAll('optgroup')].map(({ label }) => label)).toEqual([
+      'Generation I — Kanto',
+      'Generation II — Johto',
+      'Generation III — Hoenn',
+      'Generation IV — Sinnoh',
+    ])
+    expect(screen.getByAltText('Treecko Generation III sprite')).toHaveAttribute('src', '/sprites/emerald/252.png')
+
+    await user.selectOptions(gameSelection, 'ruby')
+
+    expect(screen.getByAltText('Treecko Generation III sprite')).toHaveAttribute('src', '/sprites/ruby-sapphire/252.png')
+    await user.click(screen.getByRole('button', { name: 'View Treecko field notes' }))
+    expect(within(screen.getByRole('dialog')).getByText('Ruby Version')).toBeInTheDocument()
+  })
+
+  it('keeps FireRed and LeafGreen in a separate Kanto section', async () => {
+    const user = userEvent.setup()
+    render(<App pokemon={fixturePokemon} />)
+
+    const gameSelection = screen.getByLabelText('Game selection')
+    expect(screen.getByRole('group', { name: 'Generation I — Kanto' })).toBeInTheDocument()
+
+    await user.selectOptions(gameSelection, 'firered')
+
+    expect(screen.getByRole('heading', { name: 'Kanto Living Dex' })).toBeInTheDocument()
+    expect(screen.getByText('All 1 Pokémon first discovered in Generation I.')).toBeInTheDocument()
+    expect(screen.queryByText('Treecko')).not.toBeInTheDocument()
+    expect(screen.getByAltText('Bulbasaur Generation III sprite')).toHaveAttribute('src', '/sprites/firered-leafgreen/1.png')
+
+    await user.click(screen.getByRole('button', { name: 'View Bulbasaur field notes' }))
+    const dialog = screen.getByRole('dialog', { name: 'Bulbasaur' })
+    expect(within(dialog).getByText('FireRed Version')).toBeInTheDocument()
+    expect(within(dialog).getByText('Pallet Town')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Emerald')).not.toBeInTheDocument()
+  })
+
+  it('uses HeartGold and SoulSilver locations with Generation III sprites for Johto', async () => {
+    const user = userEvent.setup()
+    render(<App pokemon={fixturePokemon} />)
+
+    const gameSelection = screen.getByLabelText('Game selection')
+    expect(screen.getByRole('group', { name: 'Generation II — Johto' })).toBeInTheDocument()
+
+    await user.selectOptions(gameSelection, 'heartgold')
+
+    expect(screen.getByRole('heading', { name: 'Johto Living Dex' })).toBeInTheDocument()
+    expect(screen.getByText('All 1 Pokémon first discovered in Generation II.')).toBeInTheDocument()
+    expect(screen.queryByText('Bulbasaur')).not.toBeInTheDocument()
+    expect(screen.queryByText('Treecko')).not.toBeInTheDocument()
+    expect(screen.getByAltText('Chikorita Generation III sprite')).toHaveAttribute('src', '/sprites/emerald/152.png')
+
+    await user.click(screen.getByRole('button', { name: 'View Chikorita field notes' }))
+    const dialog = screen.getByRole('dialog', { name: 'Chikorita' })
+    expect(within(dialog).getByText('HeartGold Version')).toBeInTheDocument()
+    expect(within(dialog).getByText('New Bark Town')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Emerald')).not.toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: /SoulSilver/ }))
+    expect(within(dialog).getByText('SoulSilver Version')).toBeInTheDocument()
+  })
+
+  it('uses Diamond, Pearl, and Platinum locations with Generation IV sprites for Sinnoh', async () => {
+    const user = userEvent.setup()
+    render(<App pokemon={fixturePokemon} />)
+
+    await user.selectOptions(screen.getByLabelText('Game selection'), 'diamond')
+
+    expect(screen.getByRole('heading', { name: 'Sinnoh Living Dex' })).toBeInTheDocument()
+    expect(screen.getByText('All 1 Pokémon first discovered in Generation IV.')).toBeInTheDocument()
+    expect(screen.queryByText('Chikorita')).not.toBeInTheDocument()
+    expect(screen.getByAltText('Turtwig Generation IV sprite')).toHaveAttribute('src', '/sprites/diamond-pearl/387.png')
+
+    await user.click(screen.getByRole('button', { name: 'View Turtwig field notes' }))
+    const dialog = screen.getByRole('dialog', { name: 'Turtwig' })
+    expect(within(dialog).getByText('Diamond Version')).toBeInTheDocument()
+    expect(within(dialog).getByText('Route 201')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Emerald')).not.toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: /Platinum/ }))
+    expect(within(dialog).getByText('Platinum Version')).toBeInTheDocument()
+    expect(within(dialog).getByAltText('Turtwig Generation IV sprite')).toHaveAttribute('src', '/sprites/platinum/387.png')
+  })
+
+  it('restores caught Generation IV entries from existing local progress', () => {
+    localStorage.setItem('hoenn-living-dex-game-v1', 'diamond')
+    localStorage.setItem('hoenn-living-dex-caught-v1', '[387]')
+
+    render(<App pokemon={fixturePokemon} />)
+
+    expect(screen.getByTestId('pokemon-card-387')).toHaveClass('is-caught')
+    expect(screen.getByLabelText('1 of 1 Pokémon caught')).toBeInTheDocument()
+  })
+
+  it('shows exact evolution requirements when a Pokémon has no direct encounter', async () => {
+    const user = userEvent.setup()
+    const grovyle = pokemonData.pokemon.find(({ id }) => id === 253)
+    render(<App pokemon={[grovyle]} />)
+
+    await user.click(screen.getByRole('button', { name: 'View Grovyle field notes' }))
+    const dialog = screen.getByRole('dialog', { name: 'Grovyle' })
+    const evolutionGuide = within(dialog).getByRole('region', { name: 'Evolution routes' })
+    const incomingRoute = within(evolutionGuide).getByText('Evolves from').closest('li')
+
+    expect(within(incomingRoute).getByText('Treecko')).toBeInTheDocument()
+    expect(within(incomingRoute).getByText('Grovyle')).toBeInTheDocument()
+    expect(within(incomingRoute).getByText('Level')).toBeInTheDocument()
+    expect(within(incomingRoute).getByText('Lv. 16')).toBeInTheDocument()
+    expect(within(dialog).getByText('No direct encounter in Emerald')).toBeInTheDocument()
+  })
+
+  it('searches by exact Pokédex number and combines status filters', async () => {
+    const user = userEvent.setup()
+    render(<App pokemon={fixturePokemon} />)
+
+    const search = screen.getByRole('searchbox', { name: 'Search by Pokémon name or number' })
+    await user.type(search, '#252')
+
+    expect(screen.getByText('Treecko')).toBeInTheDocument()
+    expect(screen.queryByText('Grovyle')).not.toBeInTheDocument()
+
+    await user.clear(search)
+    await user.click(screen.getByRole('button', { name: 'Mark Mudkip caught' }))
+    await user.selectOptions(screen.getByLabelText('Status'), 'caught')
+
+    expect(screen.getByText('Mudkip')).toBeInTheDocument()
+    expect(screen.queryByText('Treecko')).not.toBeInTheDocument()
+  })
+})
+
+describe('bundled Pokédex data', () => {
+  it('contains one complete National Dex through Generation IV with valid game encounter arrays', () => {
+    const ids = pokemonData.pokemon.map(({ id }) => id)
+    const introducedInGen1 = pokemonData.pokemon.filter(({ generation }) => generation === 'generation-i')
+    const introducedInGen2 = pokemonData.pokemon.filter(({ generation }) => generation === 'generation-ii')
+    const introducedInGen3 = pokemonData.pokemon.filter(({ generation }) => generation === 'generation-iii')
+    const introducedInGen4 = pokemonData.pokemon.filter(({ generation }) => generation === 'generation-iv')
+
+    expect(pokemonData.pokemon).toHaveLength(493)
+    expect(new Set(ids).size).toBe(493)
+    expect(Math.min(...ids)).toBe(1)
+    expect(Math.max(...ids)).toBe(493)
+    expect(pokemonData.pokemon[385].displayName).toBe('Deoxys')
+    expect(pokemonData.pokemon[492].displayName).toBe('Arceus')
+    expect(pokemonData.meta.games).toEqual([
+      'firered',
+      'leafgreen',
+      'heartgold',
+      'soulsilver',
+      'ruby',
+      'sapphire',
+      'emerald',
+      'diamond',
+      'pearl',
+      'platinum',
+    ])
+    expect(introducedInGen1).toHaveLength(151)
+    expect(introducedInGen1[0].id).toBe(1)
+    expect(introducedInGen1.at(-1).id).toBe(151)
+    expect(introducedInGen2).toHaveLength(100)
+    expect(introducedInGen2[0].id).toBe(152)
+    expect(introducedInGen2.at(-1).id).toBe(251)
+    expect(introducedInGen3).toHaveLength(135)
+    expect(introducedInGen3[0].id).toBe(252)
+    expect(introducedInGen3.at(-1).id).toBe(386)
+    expect(introducedInGen4).toHaveLength(107)
+    expect(introducedInGen4[0].id).toBe(387)
+    expect(introducedInGen4.at(-1).id).toBe(493)
+    expect(introducedInGen1.filter(({ encounters }) => encounters.firered.length > 0)).toHaveLength(100)
+    expect(introducedInGen1.filter(({ encounters }) => encounters.leafgreen.length > 0)).toHaveLength(100)
+    expect(introducedInGen2.filter(({ encounters }) => encounters.heartgold.length > 0)).toHaveLength(59)
+    expect(introducedInGen2.filter(({ encounters }) => encounters.soulsilver.length > 0)).toHaveLength(59)
+    expect(introducedInGen4.filter(({ encounters }) => encounters.diamond.length > 0)).toHaveLength(61)
+    expect(introducedInGen4.filter(({ encounters }) => encounters.pearl.length > 0)).toHaveLength(61)
+    expect(introducedInGen4.filter(({ encounters }) => encounters.platinum.length > 0)).toHaveLength(62)
+    expect(pokemonData.pokemon[164].encounters.heartgold).toHaveLength(0)
+    expect(pokemonData.pokemon[164].encounters.soulsilver.length).toBeGreaterThan(0)
+    expect(pokemonData.pokemon[166].encounters.heartgold.length).toBeGreaterThan(0)
+    expect(pokemonData.pokemon[166].encounters.soulsilver).toHaveLength(0)
+    expect(pokemonData.pokemon[22].encounters.firered.length).toBeGreaterThan(0)
+    expect(pokemonData.pokemon[22].encounters.leafgreen).toHaveLength(0)
+    expect(pokemonData.pokemon[26].encounters.firered).toHaveLength(0)
+    expect(pokemonData.pokemon[26].encounters.leafgreen.length).toBeGreaterThan(0)
+    expect(pokemonData.pokemon[34].types).toEqual(['normal'])
+    expect(pokemonData.pokemon[430].encounters.diamond).toHaveLength(0)
+    expect(pokemonData.pokemon[430].encounters.pearl.length).toBeGreaterThan(0)
+    expect(pokemonData.pokemon[433].encounters.diamond.length).toBeGreaterThan(0)
+    expect(pokemonData.pokemon[433].encounters.pearl).toHaveLength(0)
+    expect(pokemonData.pokemon[486].encounters.platinum.length).toBeGreaterThan(0)
+    expect(pokemonData.pokemon[467].types).toEqual(['normal', 'flying'])
+
+    for (const pokemon of pokemonData.pokemon) {
+      expect(pokemon.displayName).toBeTruthy()
+      expect(pokemon.types.length).toBeGreaterThan(0)
+      expect(Array.isArray(pokemon.encounters.ruby)).toBe(true)
+      expect(Array.isArray(pokemon.encounters.sapphire)).toBe(true)
+      expect(Array.isArray(pokemon.encounters.emerald)).toBe(true)
+      expect(Array.isArray(pokemon.encounters.firered)).toBe(true)
+      expect(Array.isArray(pokemon.encounters.leafgreen)).toBe(true)
+      expect(Array.isArray(pokemon.encounters.heartgold)).toBe(true)
+      expect(Array.isArray(pokemon.encounters.soulsilver)).toBe(true)
+      expect(Array.isArray(pokemon.encounters.diamond)).toBe(true)
+      expect(Array.isArray(pokemon.encounters.pearl)).toBe(true)
+      expect(Array.isArray(pokemon.encounters.platinum)).toBe(true)
+      for (const location of Object.values(pokemon.encounters).flat()) {
+        expect(location.maxChance).toBeLessThanOrEqual(100)
+      }
+    }
+  })
+
+  it('provides game-aware evolution routes for every supported requirement type', () => {
+    const pokemon = (id) => pokemonData.pokemon[id - 1]
+    const route = (id, game, fromId, toId) => evolutionRoutesForGame(pokemon(id), game)
+      .find(({ from, to }) => from.id === fromId && to.id === toId)
+
+    expect(route(2, 'firered', 1, 2).methods[0]).toMatchObject({ trigger: 'level-up', minLevel: 16 })
+    expect(route(134, 'firered', 133, 134).methods[0]).toMatchObject({ trigger: 'use-item', item: 'Water Stone' })
+    expect(route(68, 'firered', 67, 68).methods[0]).toMatchObject({ trigger: 'trade' })
+    expect(route(208, 'heartgold', 95, 208).methods[0]).toMatchObject({ trigger: 'trade', heldItem: 'Metal Coat' })
+    expect(route(463, 'diamond', 108, 463).methods[0]).toMatchObject({ trigger: 'level-up', knownMove: 'Rollout' })
+    expect(route(462, 'diamond', 82, 462).methods[0]).toMatchObject({ trigger: 'level-up', location: 'Mt. Coronet' })
+    expect(route(472, 'platinum', 207, 472).methods[0]).toMatchObject({ heldItem: 'Razor Fang', timeOfDay: 'Night' })
+    expect(route(169, 'emerald', 42, 169).methods[0]).toMatchObject({ minFriendship: 220 })
+    expect(route(350, 'firered', 349, 350).methods[0]).toMatchObject({ minBeauty: 170 })
+    expect(route(350, 'heartgold', 349, 350).methods[0].notes.join(' ')).toMatch(/Beauty is hidden/)
+    expect(route(237, 'heartgold', 236, 237).methods[0]).toMatchObject({ minLevel: 20, relativePhysicalStats: 'Attack = Defense' })
+    expect(route(413, 'diamond', 412, 413).methods[0]).toMatchObject({ minLevel: 20, gender: 'Female' })
+    expect(route(458, 'diamond', 458, 226).methods[0]).toMatchObject({ partySpecies: 'Remoraid' })
+    expect(route(266, 'emerald', 265, 266).methods[0].specialCondition).toMatch(/personality value/i)
+    expect(route(292, 'emerald', 290, 292).methods[0]).toMatchObject({ trigger: 'shed', minLevel: 20 })
+    expect(route(292, 'platinum', 290, 292).methods[0].specialCondition).toMatch(/regular Poké Ball/)
+    expect(route(473, 'diamond', 221, 473).methods[0]).not.toHaveProperty('knownMoveLevel')
+    expect(route(473, 'diamond', 221, 473).methods[0].notes.join(' ')).toMatch(/Move Reminder/)
+    expect(route(490, 'diamond', 489, 490)).toBeUndefined()
+
+    const heartGoldMagnezone = route(462, 'heartgold', 82, 462)
+    expect(heartGoldMagnezone.methods).toHaveLength(0)
+    expect(heartGoldMagnezone.unavailableReason).toMatch(/Diamond|Pearl|Platinum/)
+
+    const fireRedEspeon = route(196, 'firered', 133, 196)
+    expect(fireRedEspeon.methods).toHaveLength(0)
+    expect(fireRedEspeon.unavailableReason).toMatch(/time/i)
+
+    for (const entry of pokemonData.pokemon) {
+      for (const game of GAME_IDS) {
+        for (const evolution of evolutionRoutesForGame(entry, game)) {
+          expect(['from', 'to']).toContain(evolution.direction)
+          expect(evolution.from.id).toBeGreaterThan(0)
+          expect(evolution.to.id).toBeLessThanOrEqual(493)
+          expect(evolution.methods.length > 0 || evolution.unavailableReason).toBeTruthy()
+
+          for (const method of evolution.methods) {
+            expect(['level-up', 'trade', 'use-item', 'shed']).toContain(method.trigger)
+            if (method.minLevel) expect(method.minLevel).toBeGreaterThan(0)
+            for (const value of method.notes ?? []) expect(value).toBeTruthy()
+          }
+        }
+      }
+    }
+  })
+})
