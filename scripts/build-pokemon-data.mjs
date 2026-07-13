@@ -6,20 +6,35 @@ import { GAME_CATALOG, GAME_GROUPS, GAME_IDS } from '../src/gameCatalog.js'
 const ROOT = path.resolve(import.meta.dirname, '..')
 const DATA_DIR = path.join(ROOT, 'src', 'data')
 const SPRITE_ROOT = path.join(ROOT, 'public', 'sprites')
-const POKEMON_LIMIT = 493
+const POKEMON_LIMIT = 649
 const GAMES = GAME_IDS
 const MECHANICS_BY_POKEMON_GENERATION = new Map(
   GAME_GROUPS.map(({ pokemonGeneration, mechanicsGeneration }) => [pokemonGeneration, mechanicsGeneration]),
 )
 const SPRITE_SOURCES = [
   ...new Map(
-    GAME_CATALOG.map(({ spriteGeneration, spriteSet }) => [
-      `${spriteGeneration}:${spriteSet}`,
-      { generation: spriteGeneration, set: spriteSet },
+    GAME_CATALOG.map(({ spriteGeneration, spriteSet, spriteExtension = 'png' }) => [
+      `${spriteGeneration}:${spriteSet}:${spriteExtension}`,
+      { generation: spriteGeneration, set: spriteSet, extension: spriteExtension },
     ]),
   ).values(),
 ]
-const SPRITE_SETS = [...new Set(SPRITE_SOURCES.map(({ set }) => set))]
+const ANIMATED_SPRITE_SOURCES = [
+  ...new Map(
+    GAME_CATALOG
+      .filter(({ animatedSpriteSet }) => animatedSpriteSet)
+      .map(({ spriteGeneration, animatedSpriteSet, animatedSpriteExtension = 'gif' }) => [
+        `${spriteGeneration}:${animatedSpriteSet}:${animatedSpriteExtension}`,
+        { generation: spriteGeneration, set: animatedSpriteSet, extension: animatedSpriteExtension },
+      ]),
+  ).values(),
+]
+const SPRITE_SETS = [
+  ...new Set([
+    ...SPRITE_SOURCES.map(({ set }) => set),
+    ...ANIMATED_SPRITE_SOURCES.map(({ set }) => set),
+  ]),
+]
 const VERSION_GROUP_CONFIGS = [
   ...new Map(
     GAME_CATALOG.map((game) => [
@@ -45,12 +60,13 @@ const RESOURCE_DISPLAY_NAMES = {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-async function fetchWithRetry(url, options = {}, attempts = 5) {
+async function fetchWithRetry(url, options = {}, attempts = 5, allowNotFound = false) {
   let lastError
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       const response = await fetch(url, options)
+      if (allowNotFound && response.status === 404) return null
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
       return response
     } catch (error) {
@@ -102,7 +118,7 @@ function displayName(name) {
 function displayLocation(slug) {
   return titleCase(
     slug
-      .replace(/^(hoenn|kanto|johto|sinnoh)-/, '')
+      .replace(/^(hoenn|kanto|johto|sinnoh|unova)-/, '')
       .replace(/-area$/, '')
       .replace(/-b[0-9]+f$/, (floor) => `-${floor.slice(1).toUpperCase()}`),
   )
@@ -361,13 +377,22 @@ function buildEvolutionRoutes({
 
       if (transition.introducedGeneration > versionGroup.mechanicsGeneration) continue
 
-      const applicableDetails = transition.details.filter((detail) => {
+      const inheritedDetails = transition.details.filter((detail) => {
         if (!detail.version_group) return true
         const detailVersionGroup = versionGroupMeta.get(detail.version_group.name)
         return detailVersionGroup
           && detailVersionGroup.generation <= versionGroup.mechanicsGeneration
           && detailVersionGroup.order <= versionGroup.order
       })
+      const locationDetails = inheritedDetails.filter(({ location }) => location)
+      const latestLocationOrder = Math.max(
+        -1,
+        ...locationDetails.map((detail) => versionGroupMeta.get(detail.version_group?.name)?.order ?? 0),
+      )
+      const applicableDetails = inheritedDetails.filter((detail) => (
+        !detail.location
+        || (versionGroupMeta.get(detail.version_group?.name)?.order ?? 0) === latestLocationOrder
+      ))
 
       const availableDetails = applicableDetails.filter((detail) => !evolutionUnavailableReason(detail, versionGroup))
       const unavailableReasons = applicableDetails
@@ -412,14 +437,16 @@ function buildEvolutionRoutes({
   return routesByPokemon
 }
 
-async function downloadSprite(id, set, generation) {
+async function downloadSprite(id, set, generation, extension = 'png', optional = false) {
   const folder = path.join(SPRITE_ROOT, set)
-  const target = path.join(folder, `${id}.png`)
-  if (existsSync(target)) return
+  const target = path.join(folder, `${id}.${extension}`)
+  if (existsSync(target)) return true
 
-  const url = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/${generation}/${set}/${id}.png`
-  const response = await fetchWithRetry(url)
+  const url = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/${generation}/${set}/${id}.${extension}`
+  const response = await fetchWithRetry(url, {}, 5, optional)
+  if (!response) return false
   await writeFile(target, Buffer.from(await response.arrayBuffer()))
+  return true
 }
 
 async function main() {
@@ -533,18 +560,58 @@ async function main() {
         pokemon
           .filter(({ generation }) => !game.pokemonGeneration || generation === game.pokemonGeneration)
           .map(({ id }) => [
-            `${game.spriteGeneration}:${game.spriteSet}:${id}`,
-            { id, set: game.spriteSet, generation: game.spriteGeneration },
+            `${game.spriteGeneration}:${game.spriteSet}:${game.spriteExtension ?? 'png'}:${id}`,
+            {
+              id,
+              set: game.spriteSet,
+              generation: game.spriteGeneration,
+              extension: game.spriteExtension ?? 'png',
+            },
           ]),
       ),
     ).values(),
   ]
-  await runPool(spriteJobs, ({ id, set, generation }, index) => {
+  await runPool(spriteJobs, ({ id, set, generation, extension }, index) => {
     if ((index + 1) % 100 === 0 || index + 1 === spriteJobs.length) {
       console.log(`  Downloaded ${index + 1}/${spriteJobs.length}`)
     }
-    return downloadSprite(id, set, generation)
+    return downloadSprite(id, set, generation, extension)
   }, 20)
+
+  const animatedSpriteJobs = [
+    ...new Map(
+      GAME_CATALOG
+        .filter(({ animatedSpriteSet }) => animatedSpriteSet)
+        .flatMap((game) =>
+          pokemon
+            .filter(({ generation }) => !game.pokemonGeneration || generation === game.pokemonGeneration)
+            .map(({ id }) => [
+              `${game.spriteGeneration}:${game.animatedSpriteSet}:${game.animatedSpriteExtension ?? 'gif'}:${id}`,
+              {
+                id,
+                set: game.animatedSpriteSet,
+                generation: game.spriteGeneration,
+                extension: game.animatedSpriteExtension ?? 'gif',
+              },
+            ]),
+        ),
+    ).values(),
+  ]
+
+  if (animatedSpriteJobs.length > 0) {
+    console.log('Downloading optional animated detail sprites…')
+    const animatedResults = await runPool(animatedSpriteJobs, ({ id, set, generation, extension }, index) => {
+      if ((index + 1) % 50 === 0 || index + 1 === animatedSpriteJobs.length) {
+        console.log(`  Processed ${index + 1}/${animatedSpriteJobs.length} animated sprites`)
+      }
+      return downloadSprite(id, set, generation, extension, true)
+    }, 16)
+    const missingAnimatedSprites = animatedResults.filter((downloaded) => !downloaded).length
+
+    if (missingAnimatedSprites > 0) {
+      console.log(`  ${missingAnimatedSprites} animated sprites were unavailable; the UI will use static fallbacks`)
+    }
+  }
 
   const output = {
     meta: {

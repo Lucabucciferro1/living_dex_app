@@ -5,7 +5,22 @@ import App from './App.jsx'
 import pokemonData from './data/pokemon.json'
 import { GAME_IDS, evolutionRoutesForGame } from './gameCatalog.js'
 
-const emptyEncounters = () => ({ ruby: [], sapphire: [], emerald: [] })
+const emptyEncounters = () => ({
+  firered: [],
+  leafgreen: [],
+  heartgold: [],
+  soulsilver: [],
+  ruby: [],
+  sapphire: [],
+  emerald: [],
+  diamond: [],
+  pearl: [],
+  platinum: [],
+  black: [],
+  white: [],
+  'black-2': [],
+  'white-2': [],
+})
 
 const fixturePokemon = [
   {
@@ -164,6 +179,52 @@ const fixturePokemon = [
     weight: 76,
     encounters: emptyEncounters(),
   },
+  {
+    id: 495,
+    name: 'snivy',
+    displayName: 'Snivy',
+    genus: 'Grass Snake Pokémon',
+    generation: 'generation-v',
+    evolvesFrom: null,
+    types: ['grass'],
+    height: 6,
+    weight: 81,
+    encounters: {
+      ...emptyEncounters(),
+      black: [
+        {
+          area: 'Nuvema Town',
+          areaSlug: 'nuvema-town-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+      white: [
+        {
+          area: 'Nuvema Town',
+          areaSlug: 'nuvema-town-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+      'black-2': [
+        {
+          area: 'Aspertia City',
+          areaSlug: 'aspertia-city-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+      'white-2': [
+        {
+          area: 'Aspertia City',
+          areaSlug: 'aspertia-city-area',
+          maxChance: 100,
+          details: [{ method: 'Gift', minLevel: 5, maxLevel: 5, chance: 100, conditions: [] }],
+        },
+      ],
+    },
+  },
 ]
 
 describe('Living Dex Tracker', () => {
@@ -172,6 +233,7 @@ describe('Living Dex Tracker', () => {
   })
 
   it('toggles caught state on right-click without opening the location dialog', async () => {
+    localStorage.setItem('hoenn-living-dex-game-v1', 'emerald')
     render(<App pokemon={fixturePokemon} />)
     const card = screen.getByTestId('pokemon-card-252')
 
@@ -190,6 +252,7 @@ describe('Living Dex Tracker', () => {
 
   it('opens version-specific encounter details on left-click and closes with Escape', async () => {
     const user = userEvent.setup()
+    localStorage.setItem('hoenn-living-dex-game-v1', 'emerald')
     render(<App pokemon={fixturePokemon} />)
 
     await user.click(screen.getByRole('button', { name: 'View Treecko field notes' }))
@@ -204,18 +267,27 @@ describe('Living Dex Tracker', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('uses the header game selection for sprites and location details', async () => {
+  it('defaults to the Generation I collection and uses the header game selection for sprites and location details', async () => {
     const user = userEvent.setup()
     render(<App pokemon={fixturePokemon} />)
 
     const gameSelection = screen.getByLabelText('Game selection')
-    expect(gameSelection).toHaveValue('emerald')
+    expect(gameSelection).toHaveValue('firered')
     expect([...gameSelection.querySelectorAll('optgroup')].map(({ label }) => label)).toEqual([
       'Generation I — Kanto',
       'Generation II — Johto',
       'Generation III — Hoenn',
       'Generation IV — Sinnoh',
+      'Generation V — Unova',
     ])
+    expect(screen.getByRole('heading', { name: 'Kanto Living Dex' })).toBeInTheDocument()
+    expect(screen.getByText('All 1 Pokémon first discovered in Generation I.')).toBeInTheDocument()
+    expect(screen.getByText('Bulbasaur')).toBeInTheDocument()
+    expect(screen.queryByText('Treecko')).not.toBeInTheDocument()
+    expect(screen.getByAltText('Bulbasaur Generation III sprite')).toHaveAttribute('src', '/sprites/firered-leafgreen/1.png')
+
+    await user.selectOptions(gameSelection, 'emerald')
+
     expect(screen.getByAltText('Treecko Generation III sprite')).toHaveAttribute('src', '/sprites/emerald/252.png')
 
     await user.selectOptions(gameSelection, 'ruby')
@@ -293,6 +365,54 @@ describe('Living Dex Tracker', () => {
     expect(within(dialog).getByAltText('Turtwig Generation IV sprite')).toHaveAttribute('src', '/sprites/platinum/387.png')
   })
 
+  it('scopes the Unova section to Generation V and uses an animated modal sprite with a static fallback', async () => {
+    const user = userEvent.setup()
+    render(<App pokemon={fixturePokemon} />)
+
+    const gameSelection = screen.getByLabelText('Game selection')
+    const unovaGroup = [...gameSelection.querySelectorAll('optgroup')]
+      .find(({ label }) => label === 'Generation V — Unova')
+
+    expect(unovaGroup).toBeDefined()
+    expect([...unovaGroup.querySelectorAll('option')].map(({ value, textContent }) => [value, textContent])).toEqual([
+      ['black', 'Pokémon Black'],
+      ['white', 'Pokémon White'],
+      ['black-2', 'Pokémon Black 2'],
+      ['white-2', 'Pokémon White 2'],
+    ])
+
+    await user.selectOptions(gameSelection, 'black')
+
+    expect(screen.getByRole('heading', { name: 'Unova Living Dex' })).toBeInTheDocument()
+    expect(screen.getByText('All 1 Pokémon first discovered in Generation V.')).toBeInTheDocument()
+    expect(screen.getByTestId('pokemon-card-495')).toBeInTheDocument()
+    expect(screen.queryByTestId('pokemon-card-1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('pokemon-card-152')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('pokemon-card-252')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('pokemon-card-387')).not.toBeInTheDocument()
+
+    const gridSprite = within(screen.getByTestId('pokemon-card-495'))
+      .getByAltText('Snivy Generation V sprite')
+    expect(gridSprite).toHaveAttribute('src', '/sprites/black-white/495.png')
+
+    await user.click(screen.getByRole('button', { name: 'View Snivy field notes' }))
+    const dialog = screen.getByRole('dialog', { name: 'Snivy' })
+    const versionButtons = within(dialog).getByRole('group', { name: 'Choose version' })
+    expect(within(versionButtons).getAllByRole('button')).toHaveLength(4)
+    expect([...versionButtons.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
+      'BlackB',
+      'WhiteW',
+      'Black 2B2',
+      'White 2W2',
+    ])
+
+    const modalSprite = within(dialog).getByAltText('Snivy animated Generation V sprite')
+    expect(modalSprite).toHaveAttribute('src', '/sprites/black-white/animated/495.gif')
+
+    fireEvent.error(modalSprite)
+    expect(modalSprite).toHaveAttribute('src', '/sprites/black-white/495.png')
+  })
+
   it('restores caught Generation IV entries from existing local progress', () => {
     localStorage.setItem('hoenn-living-dex-game-v1', 'diamond')
     localStorage.setItem('hoenn-living-dex-caught-v1', '[387]')
@@ -306,6 +426,7 @@ describe('Living Dex Tracker', () => {
   it('shows exact evolution requirements when a Pokémon has no direct encounter', async () => {
     const user = userEvent.setup()
     const grovyle = pokemonData.pokemon.find(({ id }) => id === 253)
+    localStorage.setItem('hoenn-living-dex-game-v1', 'emerald')
     render(<App pokemon={[grovyle]} />)
 
     await user.click(screen.getByRole('button', { name: 'View Grovyle field notes' }))
@@ -322,6 +443,7 @@ describe('Living Dex Tracker', () => {
 
   it('searches by exact Pokédex number and combines status filters', async () => {
     const user = userEvent.setup()
+    localStorage.setItem('hoenn-living-dex-game-v1', 'emerald')
     render(<App pokemon={fixturePokemon} />)
 
     const search = screen.getByRole('searchbox', { name: 'Search by Pokémon name or number' })
@@ -340,19 +462,21 @@ describe('Living Dex Tracker', () => {
 })
 
 describe('bundled Pokédex data', () => {
-  it('contains one complete National Dex through Generation IV with valid game encounter arrays', () => {
+  it('contains one complete National Dex through Generation V with valid game encounter arrays', () => {
     const ids = pokemonData.pokemon.map(({ id }) => id)
     const introducedInGen1 = pokemonData.pokemon.filter(({ generation }) => generation === 'generation-i')
     const introducedInGen2 = pokemonData.pokemon.filter(({ generation }) => generation === 'generation-ii')
     const introducedInGen3 = pokemonData.pokemon.filter(({ generation }) => generation === 'generation-iii')
     const introducedInGen4 = pokemonData.pokemon.filter(({ generation }) => generation === 'generation-iv')
+    const introducedInGen5 = pokemonData.pokemon.filter(({ generation }) => generation === 'generation-v')
 
-    expect(pokemonData.pokemon).toHaveLength(493)
-    expect(new Set(ids).size).toBe(493)
+    expect(pokemonData.pokemon).toHaveLength(649)
+    expect(new Set(ids).size).toBe(649)
     expect(Math.min(...ids)).toBe(1)
-    expect(Math.max(...ids)).toBe(493)
+    expect(Math.max(...ids)).toBe(649)
     expect(pokemonData.pokemon[385].displayName).toBe('Deoxys')
     expect(pokemonData.pokemon[492].displayName).toBe('Arceus')
+    expect(pokemonData.pokemon[648].displayName).toBe('Genesect')
     expect(pokemonData.meta.games).toEqual([
       'firered',
       'leafgreen',
@@ -364,6 +488,10 @@ describe('bundled Pokédex data', () => {
       'diamond',
       'pearl',
       'platinum',
+      'black',
+      'white',
+      'black-2',
+      'white-2',
     ])
     expect(introducedInGen1).toHaveLength(151)
     expect(introducedInGen1[0].id).toBe(1)
@@ -377,6 +505,9 @@ describe('bundled Pokédex data', () => {
     expect(introducedInGen4).toHaveLength(107)
     expect(introducedInGen4[0].id).toBe(387)
     expect(introducedInGen4.at(-1).id).toBe(493)
+    expect(introducedInGen5).toHaveLength(156)
+    expect(introducedInGen5[0].id).toBe(494)
+    expect(introducedInGen5.at(-1).id).toBe(649)
     expect(introducedInGen1.filter(({ encounters }) => encounters.firered.length > 0)).toHaveLength(100)
     expect(introducedInGen1.filter(({ encounters }) => encounters.leafgreen.length > 0)).toHaveLength(100)
     expect(introducedInGen2.filter(({ encounters }) => encounters.heartgold.length > 0)).toHaveLength(59)
@@ -384,6 +515,10 @@ describe('bundled Pokédex data', () => {
     expect(introducedInGen4.filter(({ encounters }) => encounters.diamond.length > 0)).toHaveLength(61)
     expect(introducedInGen4.filter(({ encounters }) => encounters.pearl.length > 0)).toHaveLength(61)
     expect(introducedInGen4.filter(({ encounters }) => encounters.platinum.length > 0)).toHaveLength(62)
+    expect(introducedInGen5.filter(({ encounters }) => encounters.black.length > 0)).toHaveLength(111)
+    expect(introducedInGen5.filter(({ encounters }) => encounters.white.length > 0)).toHaveLength(111)
+    expect(introducedInGen5.filter(({ encounters }) => encounters['black-2'].length > 0)).toHaveLength(109)
+    expect(introducedInGen5.filter(({ encounters }) => encounters['white-2'].length > 0)).toHaveLength(109)
     expect(pokemonData.pokemon[164].encounters.heartgold).toHaveLength(0)
     expect(pokemonData.pokemon[164].encounters.soulsilver.length).toBeGreaterThan(0)
     expect(pokemonData.pokemon[166].encounters.heartgold.length).toBeGreaterThan(0)
@@ -413,6 +548,10 @@ describe('bundled Pokédex data', () => {
       expect(Array.isArray(pokemon.encounters.diamond)).toBe(true)
       expect(Array.isArray(pokemon.encounters.pearl)).toBe(true)
       expect(Array.isArray(pokemon.encounters.platinum)).toBe(true)
+      expect(Array.isArray(pokemon.encounters.black)).toBe(true)
+      expect(Array.isArray(pokemon.encounters.white)).toBe(true)
+      expect(Array.isArray(pokemon.encounters['black-2'])).toBe(true)
+      expect(Array.isArray(pokemon.encounters['white-2'])).toBe(true)
       for (const location of Object.values(pokemon.encounters).flat()) {
         expect(location.maxChance).toBeLessThanOrEqual(100)
       }
@@ -457,7 +596,7 @@ describe('bundled Pokédex data', () => {
         for (const evolution of evolutionRoutesForGame(entry, game)) {
           expect(['from', 'to']).toContain(evolution.direction)
           expect(evolution.from.id).toBeGreaterThan(0)
-          expect(evolution.to.id).toBeLessThanOrEqual(493)
+          expect(evolution.to.id).toBeLessThanOrEqual(649)
           expect(evolution.methods.length > 0 || evolution.unavailableReason).toBeTruthy()
 
           for (const method of evolution.methods) {

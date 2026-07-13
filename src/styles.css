@@ -1362,7 +1362,7 @@ main {
 
 .game-selector--compact {
   flex: 0 0 auto;
-  width: min(280px, 100%);
+  width: min(calc(var(--game-count, 3) * 92px), 100%);
   gap: 5px;
 }
 

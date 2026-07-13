@@ -64,8 +64,17 @@ function readStoredGame() {
 }
 
 export function spritePath(pokemonId, game) {
-  const spriteSet = GAME_META[game]?.spriteSet ?? GAME_META[DEFAULT_GAME_ID].spriteSet
-  return `/sprites/${spriteSet}/${pokemonId}.png`
+  const selectedGame = GAME_META[game] ?? GAME_META[DEFAULT_GAME_ID]
+  const extension = selectedGame.spriteExtension ?? 'png'
+  return `/sprites/${selectedGame.spriteSet}/${pokemonId}.${extension}`
+}
+
+export function detailSpritePath(pokemonId, game) {
+  const selectedGame = GAME_META[game] ?? GAME_META[DEFAULT_GAME_ID]
+  if (!selectedGame.animatedSpriteSet) return spritePath(pokemonId, game)
+
+  const extension = selectedGame.animatedSpriteExtension ?? 'gif'
+  return `/sprites/${selectedGame.animatedSpriteSet}/${pokemonId}.${extension}`
 }
 
 function formatDexNumber(id) {
@@ -560,6 +569,7 @@ export function PokemonModal({ pokemon, initialGame, isCaught, onToggleCaught, o
   const siblingGames = gamesInGroup(game)
   const locations = encountersForGame(pokemon, game)
   const evolutionRoutes = evolutionRoutesForGame(pokemon, game)
+  const hasAnimatedSprite = Boolean(selectedGame.animatedSpriteSet)
 
   return (
     <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -580,11 +590,17 @@ export function PokemonModal({ pokemon, initialGame, isCaught, onToggleCaught, o
           <div className="modal-sprite-stage">
             <div className="modal-sprite-grid" aria-hidden="true" />
             <img
-              src={spritePath(pokemon.id, game)}
-              alt={`${pokemon.displayName} ${selectedGame.spriteGenerationLabel} sprite`}
+              key={`${pokemon.id}-${game}`}
+              src={detailSpritePath(pokemon.id, game)}
+              alt={`${pokemon.displayName} ${hasAnimatedSprite ? 'animated ' : ''}${selectedGame.spriteGenerationLabel} sprite`}
               width="128"
               height="128"
               draggable="false"
+              onError={(event) => {
+                if (selectedGame.animatedSpriteFallback !== 'static') return
+                const fallback = spritePath(pokemon.id, game)
+                if (!event.currentTarget.src.endsWith(fallback)) event.currentTarget.src = fallback
+              }}
             />
           </div>
           <h2 id="pokemon-modal-title">{pokemon.displayName}</h2>

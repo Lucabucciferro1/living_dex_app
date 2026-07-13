@@ -151,6 +151,75 @@ export const GAME_GROUPS = [
       },
     ],
   },
+  {
+    id: 'generation-v-unova',
+    label: 'Generation V — Unova',
+    gameGenerationLabel: 'Generation V',
+    dexGenerationLabel: 'Generation V',
+    pokemonGeneration: 'generation-v',
+    mechanicsGeneration: 5,
+    spriteGeneration: 'generation-v',
+    spriteGenerationLabel: 'Generation V',
+    region: 'Unova',
+    games: [
+      {
+        id: 'black',
+        label: 'Black',
+        fullLabel: 'Pokémon Black',
+        shortLabel: 'B',
+        versionGroup: 'black-white',
+        spriteSet: 'black-white',
+        spriteExtension: 'png',
+        animatedSpriteSet: 'black-white/animated',
+        animatedSpriteExtension: 'gif',
+        animatedSpriteFallback: 'static',
+        accent: '#3f4650',
+        darkAccent: '#1f252b',
+      },
+      {
+        id: 'white',
+        label: 'White',
+        fullLabel: 'Pokémon White',
+        shortLabel: 'W',
+        versionGroup: 'black-white',
+        spriteSet: 'black-white',
+        spriteExtension: 'png',
+        animatedSpriteSet: 'black-white/animated',
+        animatedSpriteExtension: 'gif',
+        animatedSpriteFallback: 'static',
+        accent: '#a9aaa3',
+        darkAccent: '#656861',
+      },
+      {
+        id: 'black-2',
+        label: 'Black 2',
+        fullLabel: 'Pokémon Black 2',
+        shortLabel: 'B2',
+        versionGroup: 'black-2-white-2',
+        spriteSet: 'black-white',
+        spriteExtension: 'png',
+        animatedSpriteSet: 'black-white/animated',
+        animatedSpriteExtension: 'gif',
+        animatedSpriteFallback: 'static',
+        accent: '#3b6593',
+        darkAccent: '#233f61',
+      },
+      {
+        id: 'white-2',
+        label: 'White 2',
+        fullLabel: 'Pokémon White 2',
+        shortLabel: 'W2',
+        versionGroup: 'black-2-white-2',
+        spriteSet: 'black-white',
+        spriteExtension: 'png',
+        animatedSpriteSet: 'black-white/animated',
+        animatedSpriteExtension: 'gif',
+        animatedSpriteFallback: 'static',
+        accent: '#c66469',
+        darkAccent: '#813a40',
+      },
+    ],
+  },
 ]
 
 export const GAME_CATALOG = GAME_GROUPS.flatMap((group) =>
@@ -170,7 +239,7 @@ export const GAME_CATALOG = GAME_GROUPS.flatMap((group) =>
 
 export const GAME_META = Object.fromEntries(GAME_CATALOG.map((game) => [game.id, game]))
 export const GAME_IDS = GAME_CATALOG.map(({ id }) => id)
-export const DEFAULT_GAME_ID = 'emerald'
+export const DEFAULT_GAME_ID = 'firered'
 
 export function gamesInGroup(gameId) {
   const groupId = GAME_META[gameId]?.groupId
