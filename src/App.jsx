@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import pokemonData from './data/pokemon.json'
 import {
+  ALL_GAME_ID,
   DEFAULT_GAME_ID,
   GAME_GROUPS,
-  GAME_IDS,
   GAME_META,
+  SELECTABLE_GAME_IDS,
   encountersForGame,
   evolutionRoutesForGame,
   gamesInGroup,
+  representativeGameForPokemonGeneration,
 } from './gameCatalog.js'
+import { eventAvailabilityForGame } from './eventCatalog.js'
 
 export { GAME_META } from './gameCatalog.js'
 const MAX_POKEMON_ID = pokemonData.pokemon.at(-1)?.id ?? 0
@@ -60,17 +63,39 @@ function readStoredSet(key) {
 
 function readStoredGame() {
   const stored = localStorage.getItem(GAME_STORAGE_KEY)
-  return GAME_IDS.includes(stored) ? stored : DEFAULT_GAME_ID
+  return SELECTABLE_GAME_IDS.includes(stored) ? stored : DEFAULT_GAME_ID
+}
+
+function gameForPokemonInView(activeGame, pokemon) {
+  return activeGame === ALL_GAME_ID
+    ? representativeGameForPokemonGeneration(pokemon)
+    : activeGame
+}
+
+function generationForPokemonId(pokemonId) {
+  if (pokemonId <= 151) return 'generation-i'
+  if (pokemonId <= 251) return 'generation-ii'
+  if (pokemonId <= 386) return 'generation-iii'
+  if (pokemonId <= 493) return 'generation-iv'
+  if (pokemonId <= 649) return 'generation-v'
+  return null
+}
+
+function spriteGameForPokemonId(pokemonId, game) {
+  return game === ALL_GAME_ID
+    ? representativeGameForPokemonGeneration(generationForPokemonId(pokemonId))
+    : game
 }
 
 export function spritePath(pokemonId, game) {
-  const selectedGame = GAME_META[game] ?? GAME_META[DEFAULT_GAME_ID]
+  const selectedGame = GAME_META[spriteGameForPokemonId(pokemonId, game)] ?? GAME_META[DEFAULT_GAME_ID]
   const extension = selectedGame.spriteExtension ?? 'png'
   return `/sprites/${selectedGame.spriteSet}/${pokemonId}.${extension}`
 }
 
 export function detailSpritePath(pokemonId, game) {
-  const selectedGame = GAME_META[game] ?? GAME_META[DEFAULT_GAME_ID]
+  const resolvedGame = spriteGameForPokemonId(pokemonId, game)
+  const selectedGame = GAME_META[resolvedGame] ?? GAME_META[DEFAULT_GAME_ID]
   if (!selectedGame.animatedSpriteSet) return spritePath(pokemonId, game)
 
   const extension = selectedGame.animatedSpriteExtension ?? 'gif'
@@ -109,6 +134,14 @@ function MapPinIcon() {
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" />
       <circle cx="12" cy="10" r="2.5" />
+    </svg>
+  )
+}
+
+function EventIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
     </svg>
   )
 }
@@ -182,6 +215,7 @@ function GamePicker({ activeGame, onChange }) {
           value={activeGame}
           onChange={(event) => onChange(event.target.value)}
         >
+          <option value={ALL_GAME_ID}>All Pokémon</option>
           {GAME_GROUPS.map((group) => (
             <optgroup label={group.label} key={group.id}>
               {group.games.map((game) => (
@@ -193,11 +227,15 @@ function GamePicker({ activeGame, onChange }) {
         <ChevronIcon />
       </div>
       <div className="game-picker__meta">
-        <span>{selectedGame.gameGenerationLabel}</span>
-        <span>{selectedGame.region} location data</span>
-        <span>{selectedGame.spriteGenerationLabel} sprites</span>
+        <span>{activeGame === ALL_GAME_ID ? 'Generations I–V Pokémon' : selectedGame.gameGenerationLabel}</span>
+        <span>{activeGame === ALL_GAME_ID ? 'Representative location data' : `${selectedGame.region} location data`}</span>
+        <span>{activeGame === ALL_GAME_ID ? 'Generation-matched sprites' : `${selectedGame.spriteGenerationLabel} sprites`}</span>
       </div>
-      <p className="game-picker__hint">Your selection controls the collection, progress, sprites, evolution rules, and encounter locations.</p>
+      <p className="game-picker__hint">
+        {activeGame === ALL_GAME_ID
+          ? 'All view uses a representative game for each generation when opening field notes.'
+          : 'Your selection controls the collection, progress, sprites, evolution rules, and encounter locations.'}
+      </p>
     </div>
   )
 }
@@ -221,7 +259,11 @@ function Header({ activeGame, caughtCount, totalCount, onGameChange }) {
         </div>
         <p className="eyebrow">{selectedGame.dexGenerationLabel} collection</p>
         <h1>{selectedGame.region} Living Dex</h1>
-        <p className="hero__lede">All {totalCount} Pokémon first discovered in {selectedGame.dexGenerationLabel}.</p>
+        <p className="hero__lede">
+          {activeGame === ALL_GAME_ID
+            ? `All ${totalCount} Pokémon across Generations I–V.`
+            : `All ${totalCount} Pokémon first discovered in ${selectedGame.dexGenerationLabel}.`}
+        </p>
       </div>
 
       <div className="hero__controls">
@@ -233,7 +275,9 @@ function Header({ activeGame, caughtCount, totalCount, onGameChange }) {
           <PokeballMark small />
         </div>
         <div>
-          <span className="progress-panel__label">Dex progress</span>
+          <span className="progress-panel__label">
+            {activeGame === ALL_GAME_ID ? 'National Dex progress' : 'Dex progress'}
+          </span>
           <strong>{caughtCount}<span> / {totalCount}</span></strong>
           <small>{percent}% complete</small>
         </div>
@@ -253,6 +297,7 @@ function FilterBar({
   onTypeFilterChange,
   resultCount,
   totalCount,
+  isAllView,
   onClear,
 }) {
   const hasFilters = query || caughtFilter !== 'all' || availabilityFilter !== 'all' || typeFilter !== 'all'
@@ -283,7 +328,7 @@ function FilterBar({
           </select>
         </label>
         <label>
-          <span>In this game</span>
+          <span>{isAllView ? 'Representative game' : 'In this game'}</span>
           <select value={availabilityFilter} onChange={(event) => onAvailabilityFilterChange(event.target.value)}>
             <option value="all">Any availability</option>
             <option value="available">Direct encounter</option>
@@ -312,8 +357,11 @@ function FilterBar({
 }
 
 export function PokemonCard({ pokemon, activeGame, isCaught, onOpen, onToggleCaught }) {
-  const hasEncounter = encountersForGame(pokemon, activeGame).length > 0
-  const groupGames = gamesInGroup(activeGame)
+  const displayGame = gameForPokemonInView(activeGame, pokemon)
+  const hasEncounter = encountersForGame(pokemon, displayGame).length > 0
+  const eventAvailability = eventAvailabilityForGame(pokemon, displayGame)
+  const groupGames = gamesInGroup(displayGame)
+  const eventStatusId = `event-status-${pokemon.id}-${displayGame}`
 
   function handleContextMenu(event) {
     event.preventDefault()
@@ -331,19 +379,23 @@ export function PokemonCard({ pokemon, activeGame, isCaught, onOpen, onToggleCau
         className="pokemon-card__main"
         onClick={() => onOpen(pokemon)}
         aria-label={`View ${pokemon.displayName} field notes`}
+        aria-describedby={eventAvailability ? eventStatusId : undefined}
       >
         <span className="pokemon-card__topline">
           <span className="dex-number">{formatDexNumber(pokemon.id)}</span>
-          <span className={`availability${hasEncounter ? ' is-available' : ''}`}>
-            <MapPinIcon />
-            {hasEncounter ? 'Found' : pokemon.evolvesFrom ? 'Evolve' : 'Trade'}
+          <span className={`availability${eventAvailability ? ' is-event-only' : hasEncounter ? ' is-available' : ''}`}>
+            {eventAvailability ? <EventIcon /> : <MapPinIcon />}
+            {eventAvailability ? 'Event' : hasEncounter ? 'Found' : pokemon.evolvesFrom ? 'Evolve' : 'Trade'}
           </span>
+          {eventAvailability && (
+            <span className="sr-only" id={eventStatusId}>Event-only in {GAME_META[displayGame].label}</span>
+          )}
         </span>
         <span className="sprite-stage">
           <span className="sprite-shadow" aria-hidden="true" />
           <img
-            src={spritePath(pokemon.id, activeGame)}
-            alt={`${pokemon.displayName} ${GAME_META[activeGame].spriteGenerationLabel} sprite`}
+            src={spritePath(pokemon.id, displayGame)}
+            alt={`${pokemon.displayName} ${GAME_META[displayGame].spriteGenerationLabel} sprite`}
             width="96"
             height="96"
             loading="lazy"
@@ -519,6 +571,34 @@ function EvolutionGuide({ pokemon, game, routes }) {
   )
 }
 
+function EventOnlyNote({ pokemon, game, availability }) {
+  const headingId = `event-note-${pokemon.id}-${game}`
+  const selectedGame = GAME_META[game]
+
+  return (
+    <section className="event-only-note" role="note" aria-labelledby={headingId}>
+      <span className="event-only-note__icon" aria-hidden="true"><EventIcon /></span>
+      <div>
+        <p className="eyebrow">Event / special distribution</p>
+        <h4 id={headingId}>Event-only in {selectedGame.label}</h4>
+        <p>{availability.summary}</p>
+        {availability.routes?.length > 0 && (
+          <ul className="event-only-note__routes">
+            {availability.routes.map((route) => (
+              <li key={`${route.kind}-${route.label}`}>
+                <strong>{route.label}</strong>
+                {route.location && <span> — {route.location}</span>}
+                {route.note && <span> — {route.note}</span>}
+                {route.status === 'unreleased' && <em>Never officially released</em>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  )
+}
+
 export function PokemonModal({ pokemon, initialGame, isCaught, onToggleCaught, onClose }) {
   const [game, setGame] = useState(initialGame)
   const dialogRef = useRef(null)
@@ -569,6 +649,7 @@ export function PokemonModal({ pokemon, initialGame, isCaught, onToggleCaught, o
   const siblingGames = gamesInGroup(game)
   const locations = encountersForGame(pokemon, game)
   const evolutionRoutes = evolutionRoutesForGame(pokemon, game)
+  const eventAvailability = eventAvailabilityForGame(pokemon, game)
   const hasAnimatedSprite = Boolean(selectedGame.animatedSpriteSet)
 
   return (
@@ -645,6 +726,10 @@ export function PokemonModal({ pokemon, initialGame, isCaught, onToggleCaught, o
             </p>
           </div>
 
+          {eventAvailability && (
+            <EventOnlyNote pokemon={pokemon} game={game} availability={eventAvailability} />
+          )}
+
           <EvolutionGuide pokemon={pokemon} game={game} routes={evolutionRoutes} />
 
           {locations.length > 0 ? (
@@ -670,7 +755,12 @@ export function PokemonModal({ pokemon, initialGame, isCaught, onToggleCaught, o
             <div className="no-locations">
               <div className="no-locations__icon"><PokeballMark /></div>
               <h4>No direct encounter in {selectedGame.label}</h4>
-              {pokemon.evolvesFrom ? (
+              {eventAvailability ? (
+                <p>
+                  Use the event or special-distribution routes above. This Pokémon has no standard
+                  in-game acquisition route in {selectedGame.label}.
+                </p>
+              ) : pokemon.evolvesFrom ? (
                 <p>
                   Use the evolution guide above for this version’s exact requirements.
                   The earlier stage may still require breeding or trading.
@@ -678,7 +768,7 @@ export function PokemonModal({ pokemon, initialGame, isCaught, onToggleCaught, o
               ) : (
                 <p>
                   This Pokémon may need to be bred, traded from another compatible {selectedGame.gameGenerationLabel} title,
-                  or obtained through a limited event.
+                  or transferred from another game.
                 </p>
               )}
               <div className="other-games">
@@ -778,7 +868,8 @@ export default function App({ pokemon = pokemonData.pokemon }) {
       const matchesCaught = caughtFilter === 'all'
         || (caughtFilter === 'caught' && isCaught)
         || (caughtFilter === 'missing' && !isCaught)
-      const isAvailable = encountersForGame(entry, activeGame).length > 0
+      const entryGame = gameForPokemonInView(activeGame, entry)
+      const isAvailable = encountersForGame(entry, entryGame).length > 0
       const matchesAvailability = availabilityFilter === 'all'
         || (availabilityFilter === 'available' && isAvailable)
         || (availabilityFilter === 'unavailable' && !isAvailable)
@@ -810,13 +901,18 @@ export default function App({ pokemon = pokemonData.pokemon }) {
           onTypeFilterChange={setTypeFilter}
           resultCount={filteredPokemon.length}
           totalCount={scopedPokemon.length}
+          isAllView={activeGame === ALL_GAME_ID}
           onClear={clearFilters}
         />
 
         <section className="dex-section" aria-labelledby="dex-heading">
           <div className="dex-section__heading">
             <div>
-              <p className="eyebrow">Box 01 — {GAME_META[activeGame].dexGenerationLabel}</p>
+              <p className="eyebrow">
+                {activeGame === ALL_GAME_ID
+                  ? 'National Pokédex — Generations I–V'
+                  : `Box 01 — ${GAME_META[activeGame].dexGenerationLabel}`}
+              </p>
               <h2 id="dex-heading">Pokémon collection</h2>
             </div>
             <p className="interaction-hint">
@@ -857,7 +953,7 @@ export default function App({ pokemon = pokemonData.pokemon }) {
       {selectedPokemon && (
         <PokemonModal
           pokemon={selectedPokemon}
-          initialGame={activeGame}
+          initialGame={gameForPokemonInView(activeGame, selectedPokemon)}
           isCaught={caughtIds.has(selectedPokemon.id)}
           onToggleCaught={toggleCaught}
           onClose={closeModal}

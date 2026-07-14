@@ -1,3 +1,5 @@
+import { eventAvailabilityForGame } from './eventCatalog.js'
+
 export const GAME_GROUPS = [
   {
     id: 'generation-i-kanto',
@@ -237,9 +239,54 @@ export const GAME_CATALOG = GAME_GROUPS.flatMap((group) =>
   })),
 )
 
-export const GAME_META = Object.fromEntries(GAME_CATALOG.map((game) => [game.id, game]))
-export const GAME_IDS = GAME_CATALOG.map(({ id }) => id)
+export const ALL_GAME_ID = 'all'
+
+export const ALL_GAME_META = Object.freeze({
+  id: ALL_GAME_ID,
+  label: 'All generations',
+  fullLabel: 'All supported generations',
+  shortLabel: 'All',
+  groupId: 'all-generations',
+  groupLabel: 'All generations',
+  gameGenerationLabel: 'Generations III–V',
+  dexGenerationLabel: 'National Pokédex',
+  pokemonGeneration: null,
+  mechanicsGeneration: 5,
+  spriteGeneration: null,
+  spriteGenerationLabel: 'Generation-specific',
+  region: 'National',
+  accent: '#4f7987',
+  darkAccent: '#2c4d59',
+})
+
+export const REAL_GAME_IDS = Object.freeze(GAME_CATALOG.map(({ id }) => id))
+
+// Kept as the real-game list for the data generator and encounter schema.
+export const GAME_IDS = REAL_GAME_IDS
+
+export const SELECTABLE_GAME_IDS = Object.freeze([ALL_GAME_ID, ...REAL_GAME_IDS])
+
+export const GAME_META = Object.freeze({
+  [ALL_GAME_ID]: ALL_GAME_META,
+  ...Object.fromEntries(GAME_CATALOG.map((game) => [game.id, game])),
+})
 export const DEFAULT_GAME_ID = 'firered'
+
+export const REPRESENTATIVE_GAME_BY_POKEMON_GENERATION = Object.freeze({
+  'generation-i': 'firered',
+  'generation-ii': 'heartgold',
+  'generation-iii': 'emerald',
+  'generation-iv': 'platinum',
+  'generation-v': 'black',
+})
+
+export function representativeGameForPokemonGeneration(pokemonOrGeneration) {
+  const generation = typeof pokemonOrGeneration === 'string'
+    ? pokemonOrGeneration
+    : pokemonOrGeneration?.generation
+
+  return REPRESENTATIVE_GAME_BY_POKEMON_GENERATION[generation] ?? DEFAULT_GAME_ID
+}
 
 export function gamesInGroup(gameId) {
   const groupId = GAME_META[gameId]?.groupId
@@ -247,7 +294,11 @@ export function gamesInGroup(gameId) {
 }
 
 export function encountersForGame(pokemon, gameId) {
-  return pokemon.encounters?.[gameId] ?? []
+  const encounters = pokemon.encounters?.[gameId] ?? []
+  const excludedAreaSlugs = eventAvailabilityForGame(pokemon, gameId)?.excludedEncounterAreaSlugs
+
+  if (!excludedAreaSlugs?.length) return encounters
+  return encounters.filter(({ areaSlug }) => !excludedAreaSlugs.includes(areaSlug))
 }
 
 export function evolutionRoutesForGame(pokemon, gameId) {

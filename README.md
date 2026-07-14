@@ -25,8 +25,12 @@ Open the local URL printed by Vite.
 
 ## Controls
 
-- Use **Game selection** in the header to choose the active title. That choice
-  controls sprites, availability filters, and location details everywhere.
+- Use **Game selection** in the header to choose the active title, or choose
+  **All Pokémon** to browse the complete 649-entry National Pokédex at once.
+  A specific title controls sprites, availability filters, and location details
+  everywhere. In **All Pokémon**, each species uses a representative title from
+  its generation; opening field notes starts on that title and keeps the normal
+  version-switching controls available.
 - New trackers open on Generation I with FireRed selected.
 - Left-click or tap a Pokémon card to view its evolution requirements and locations for the selected game.
 - Right-click a card to toggle it as caught.
@@ -39,6 +43,13 @@ evolved, bred, traded, or obtained through an event. Its game-aware evolution gu
 covers levels, learned moves, evolutionary items, held items, trades, friendship,
 time, gender, stats, party requirements, and location-based evolutions. Encounter
 records can include wild, gift, static, and special-distribution methods.
+
+Event-only cards use an amber **Event** status and show a game-specific acquisition
+note in field notes. These flags are explicitly curated rather than inferred from an
+empty encounter list or a static encounter, so ordinary one-off legendaries are not
+mislabelled. Through Generation V, the list covers Mew, Celebi, Jirachi, Deoxys,
+Manaphy, Darkrai, Shaymin, Arceus, Victini, Keldeo, Meloetta, and Genesect. Phione is
+excluded because it can be bred, and Zorua/Zoroark are normally obtainable in B2W2.
 
 ## Development
 

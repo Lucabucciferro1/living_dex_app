@@ -3,7 +3,12 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from './App.jsx'
 import pokemonData from './data/pokemon.json'
-import { GAME_IDS, evolutionRoutesForGame } from './gameCatalog.js'
+import {
+  EVENT_ONLY_AVAILABILITY,
+  eventAvailabilityForGame,
+  isEventOnlyForGame,
+} from './eventCatalog.js'
+import { GAME_IDS, encountersForGame, evolutionRoutesForGame } from './gameCatalog.js'
 
 const emptyEncounters = () => ({
   firered: [],
@@ -297,6 +302,90 @@ describe('Living Dex Tracker', () => {
     expect(within(screen.getByRole('dialog')).getByText('Ruby Version')).toBeInTheDocument()
   })
 
+  it('offers an All Pokémon view with a national header, progress, and generation-specific card sprites', async () => {
+    const user = userEvent.setup()
+    render(<App pokemon={fixturePokemon} />)
+
+    const gameSelection = screen.getByLabelText('Game selection')
+    const allOption = gameSelection.querySelector('option[value="all"]')
+
+    expect(allOption).toBeInTheDocument()
+    expect(allOption).toHaveTextContent('All Pokémon')
+
+    await user.selectOptions(gameSelection, 'all')
+
+    expect(screen.getByRole('heading', { name: 'National Living Dex' })).toBeInTheDocument()
+    expect(screen.getByText(/All 7 Pokémon.*Generations I–V/i)).toBeInTheDocument()
+    const progress = screen.getByLabelText('0 of 7 Pokémon caught')
+    expect(progress).toHaveTextContent(/National.*Dex progress/i)
+
+    for (const id of [1, 152, 252, 253, 258, 387, 495]) {
+      expect(screen.getByTestId(`pokemon-card-${id}`)).toBeInTheDocument()
+    }
+
+    expect(within(screen.getByTestId('pokemon-card-1')).getByRole('img'))
+      .toHaveAttribute('src', '/sprites/firered-leafgreen/1.png')
+    expect(within(screen.getByTestId('pokemon-card-152')).getByRole('img'))
+      .toHaveAttribute('src', '/sprites/emerald/152.png')
+    expect(within(screen.getByTestId('pokemon-card-252')).getByRole('img'))
+      .toHaveAttribute('src', '/sprites/emerald/252.png')
+    expect(within(screen.getByTestId('pokemon-card-387')).getByRole('img'))
+      .toHaveAttribute('src', '/sprites/platinum/387.png')
+    expect(within(screen.getByTestId('pokemon-card-495')).getByRole('img'))
+      .toHaveAttribute('src', '/sprites/black-white/495.png')
+  })
+
+  it('shows all 649 bundled Pokémon in the national view', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.selectOptions(screen.getByLabelText('Game selection'), 'all')
+
+    expect(screen.getByLabelText('0 of 649 Pokémon caught')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Search and filter Pokédex' }))
+      .toHaveTextContent('649 of 649 entries shown')
+    expect(screen.getByTestId('pokemon-card-1')).toBeInTheDocument()
+    expect(screen.getByTestId('pokemon-card-649')).toBeInTheDocument()
+  }, 15000)
+
+  it('keeps search, type, and caught filters working across the national view', async () => {
+    const user = userEvent.setup()
+    render(<App pokemon={fixturePokemon} />)
+
+    await user.selectOptions(screen.getByLabelText('Game selection'), 'all')
+    const search = screen.getByRole('searchbox', { name: 'Search by Pokémon name or number' })
+
+    await user.type(search, '#495')
+    expect(screen.getByText('Snivy')).toBeInTheDocument()
+    expect(screen.queryByText('Bulbasaur')).not.toBeInTheDocument()
+
+    await user.clear(search)
+    await user.selectOptions(screen.getByLabelText('Type'), 'water')
+    expect(screen.getByText('Mudkip')).toBeInTheDocument()
+    expect(screen.queryByText('Snivy')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Mark Mudkip caught' }))
+    await user.selectOptions(screen.getByLabelText('Status'), 'caught')
+    expect(screen.getByText('Mudkip')).toBeInTheDocument()
+    expect(screen.queryByText('Treecko')).not.toBeInTheDocument()
+  })
+
+  it('opens a Generation V card from All in Black field notes with an animated sprite', async () => {
+    const user = userEvent.setup()
+    render(<App pokemon={fixturePokemon} />)
+
+    await user.selectOptions(screen.getByLabelText('Game selection'), 'all')
+    await user.click(screen.getByRole('button', { name: 'View Snivy field notes' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Snivy' })
+    expect(within(dialog).getByText('Black Version')).toBeInTheDocument()
+    expect(within(dialog).getByAltText('Snivy animated Generation V sprite'))
+      .toHaveAttribute('src', '/sprites/black-white/animated/495.gif')
+    const selectedVersion = within(dialog).getByRole('group', { name: 'Choose version' })
+      .querySelector('[aria-pressed="true"]')
+    expect(selectedVersion).toHaveTextContent(/^BlackB$/)
+  })
+
   it('keeps FireRed and LeafGreen in a separate Kanto section', async () => {
     const user = userEvent.setup()
     render(<App pokemon={fixturePokemon} />)
@@ -441,6 +530,58 @@ describe('Living Dex Tracker', () => {
     expect(within(dialog).getByText('No direct encounter in Emerald')).toBeInTheDocument()
   })
 
+  it('identifies event-only availability on the card and in field notes', async () => {
+    const user = userEvent.setup()
+    const mew = pokemonData.pokemon.find(({ id }) => id === 151)
+    render(<App pokemon={[mew]} />)
+
+    const card = screen.getByTestId('pokemon-card-151')
+    const fieldNotesButton = within(card).getByRole('button', { name: 'View Mew field notes' })
+
+    expect(within(card).getByText('Event')).toBeInTheDocument()
+    expect(fieldNotesButton).toHaveAccessibleDescription(/event-only in FireRed/i)
+
+    await user.click(fieldNotesButton)
+    const dialog = screen.getByRole('dialog', { name: 'Mew' })
+    const eventNote = within(dialog).getByRole('note')
+
+    expect(eventNote).toHaveAccessibleName(/event-only.*FireRed/i)
+    expect(eventNote).toHaveTextContent(/special event|distribution/i)
+  })
+
+  it('does not mistake a normal static encounter for event-only availability', async () => {
+    const user = userEvent.setup()
+    const mewtwo = pokemonData.pokemon.find(({ id }) => id === 150)
+    render(<App pokemon={[mewtwo]} />)
+
+    const card = screen.getByTestId('pokemon-card-150')
+    const fieldNotesButton = within(card).getByRole('button', { name: 'View Mewtwo field notes' })
+
+    expect(within(card).getByText('Found')).toBeInTheDocument()
+    expect(within(card).queryByText('Event')).not.toBeInTheDocument()
+    expect(fieldNotesButton).not.toHaveAccessibleDescription(/event/i)
+
+    await user.click(fieldNotesButton)
+    expect(within(screen.getByRole('dialog', { name: 'Mewtwo' })).queryByRole('note')).not.toBeInTheDocument()
+  })
+
+  it('keeps unflagged no-location guidance free of event-only wording', async () => {
+    const user = userEvent.setup()
+    const phione = pokemonData.pokemon.find(({ id }) => id === 489)
+    localStorage.setItem('hoenn-living-dex-game-v1', 'diamond')
+    render(<App pokemon={[phione]} />)
+
+    const card = screen.getByTestId('pokemon-card-489')
+    expect(within(card).queryByText('Event')).not.toBeInTheDocument()
+
+    await user.click(within(card).getByRole('button', { name: 'View Phione field notes' }))
+    const dialog = screen.getByRole('dialog', { name: 'Phione' })
+    const emptyState = within(dialog).getByText('No direct encounter in Diamond').closest('.no-locations')
+
+    expect(within(dialog).queryByRole('note')).not.toBeInTheDocument()
+    expect(emptyState).not.toHaveTextContent(/event/i)
+  })
+
   it('searches by exact Pokédex number and combines status filters', async () => {
     const user = userEvent.setup()
     localStorage.setItem('hoenn-living-dex-game-v1', 'emerald')
@@ -556,6 +697,64 @@ describe('bundled Pokédex data', () => {
         expect(location.maxChance).toBeLessThanOrEqual(100)
       }
     }
+  })
+
+  it.each([
+    ['Generation I', 'Mew', 151, 'firered'],
+    ['Generation II', 'Celebi', 251, 'heartgold'],
+    ['Generation III', 'Deoxys', 386, 'emerald'],
+    ['Generation IV', 'Darkrai', 491, 'platinum'],
+    ['Generation V', 'Victini', 494, 'black'],
+  ])('flags %s event-only availability for %s in the selected game', (_generation, _name, id, game) => {
+    const pokemon = pokemonData.pokemon.find((entry) => entry.id === id)
+
+    expect(isEventOnlyForGame(pokemon, game)).toBe(true)
+    expect(eventAvailabilityForGame(pokemon, game)).not.toBeNull()
+  })
+
+  it.each([
+    ['Mewtwo', 150, 'firered'],
+    ['Ho-Oh', 250, 'heartgold'],
+    ['Rayquaza', 384, 'emerald'],
+    ['Giratina', 487, 'platinum'],
+    ['Reshiram', 643, 'black'],
+    ['Phione', 489, 'diamond'],
+    ['Zorua', 570, 'black'],
+  ])('does not flag ordinary, breedable, or event-assisted %s as event-only', (_name, id, game) => {
+    const pokemon = pokemonData.pokemon.find((entry) => entry.id === id)
+
+    expect(isEventOnlyForGame(pokemon, game)).toBe(false)
+    expect(eventAvailabilityForGame(pokemon, game)).toBeNull()
+  })
+
+  it('keeps the event-only catalogue restricted to the 12 event-origin species', () => {
+    const eventPokemonIds = Object.keys(EVENT_ONLY_AVAILABILITY).map(Number)
+    const gameRecords = Object.values(EVENT_ONLY_AVAILABILITY)
+      .flatMap((availability) => Object.entries(availability))
+
+    expect(eventPokemonIds).toEqual([151, 251, 385, 386, 490, 491, 492, 493, 494, 647, 648, 649])
+    expect(gameRecords).toHaveLength(38)
+
+    for (const [game, availability] of gameRecords) {
+      expect(GAME_IDS).toContain(game)
+      expect(availability.classification).toBe('event-only')
+      expect(availability.summary).toBeTruthy()
+      expect(availability.routes.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('hides programmed event encounters that were never officially unlocked', () => {
+    const darkrai = pokemonData.pokemon.find(({ id }) => id === 491)
+    const shaymin = pokemonData.pokemon.find(({ id }) => id === 492)
+    const arceus = pokemonData.pokemon.find(({ id }) => id === 493)
+
+    expect(encountersForGame(darkrai, 'diamond')).toHaveLength(0)
+    expect(encountersForGame(darkrai, 'platinum').map(({ area }) => area)).toContain('Newmoon Island')
+    expect(encountersForGame(shaymin, 'pearl')).toHaveLength(0)
+    expect(encountersForGame(shaymin, 'platinum').map(({ area }) => area)).toContain('Flower Paradise')
+    expect(encountersForGame(arceus, 'diamond')).toHaveLength(0)
+    expect(encountersForGame(arceus, 'pearl')).toHaveLength(0)
+    expect(encountersForGame(arceus, 'platinum')).toHaveLength(0)
   })
 
   it('provides game-aware evolution routes for every supported requirement type', () => {
